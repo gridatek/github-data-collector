@@ -11,7 +11,7 @@ on:
       organizations:
         description: 'GitHub organizations to collect data from (comma-separated)'
         required: false
-        default: 'apache,kubernetes,tensorflow,microsoft'
+        default: 'gridatek'
       max_repos_per_org:
         description: 'Maximum repositories per organization'
         required: false

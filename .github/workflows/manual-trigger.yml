@@ -6,7 +6,7 @@ on:
       single_organization:
         description: 'Single organization to collect data from'
         required: false
-        default: ''
+        default: 'gridatek'
       custom_date:
         description: 'Custom date for collection (YYYY-MM-DD)'
         required: false
@@ -127,7 +127,7 @@ jobs:
 #        fi
 
     - name: Upload results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: manual-collection-${{ steps.params.outputs.date }}
         path: output/*.json

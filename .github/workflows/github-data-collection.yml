@@ -1,0 +1,217 @@
+name: GitHub Data Collection Pipeline
+
+on:
+  # Run daily at 2 AM UTC
+  schedule:
+    - cron: '0 2 * * *'
+
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      organizations:
+        description: 'GitHub organizations to collect data from (comma-separated)'
+        required: false
+        default: 'apache,kubernetes,tensorflow,microsoft'
+      max_repos_per_org:
+        description: 'Maximum repositories per organization'
+        required: false
+        default: '50'
+        type: number
+      include_contributions:
+        description: 'Collect contribution data'
+        required: false
+        default: true
+        type: boolean
+
+  # Run on push to main for testing
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - '.github/workflows/**'
+
+env:
+  PYTHON_VERSION: '3.11'
+  OUTPUT_DIR: 'output'
+
+jobs:
+  collect-github-data:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Cache Python packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-github-action.txt
+
+    - name: Create output directory
+      run: |
+        mkdir -p ${{ env.OUTPUT_DIR }}
+
+    - name: Set collection parameters
+      id: params
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "organizations=${{ github.event.inputs.organizations }}" >> $GITHUB_OUTPUT
+          echo "max_repos=${{ github.event.inputs.max_repos_per_org }}" >> $GITHUB_OUTPUT
+          echo "include_contributions=${{ github.event.inputs.include_contributions }}" >> $GITHUB_OUTPUT
+        else
+          echo "organizations=apache,kubernetes,tensorflow,microsoft,google,facebook" >> $GITHUB_OUTPUT
+          echo "max_repos=50" >> $GITHUB_OUTPUT
+          echo "include_contributions=true" >> $GITHUB_OUTPUT
+        fi
+        echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        echo "timestamp=$(date +'%Y%m%d_%H%M%S')" >> $GITHUB_OUTPUT
+
+    - name: Collect repository data
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        ORGANIZATIONS: ${{ steps.params.outputs.organizations }}
+        MAX_REPOS: ${{ steps.params.outputs.max_repos }}
+      run: |
+        python src/collect_repo_data.py \
+          --organizations "${{ env.ORGANIZATIONS }}" \
+          --max-repos ${{ env.MAX_REPOS }} \
+          --output-dir ${{ env.OUTPUT_DIR }} \
+          --date ${{ steps.params.outputs.date }}
+
+    - name: Collect contribution data
+      if: steps.params.outputs.include_contributions == 'true'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        python src/collect_contribution_data.py \
+          --input-file ${{ env.OUTPUT_DIR }}/repos_raw_${{ steps.params.outputs.date }}.json \
+          --output-dir ${{ env.OUTPUT_DIR }} \
+          --date ${{ steps.params.outputs.date }}
+
+    - name: Generate summary report
+      env:
+        COLLECTION_DATE: ${{ steps.params.outputs.date }}
+      run: |
+        python src/generate_summary.py \
+          --repo-file ${{ env.OUTPUT_DIR }}/repos_raw_${{ env.COLLECTION_DATE }}.json \
+          --contrib-file ${{ env.OUTPUT_DIR }}/contributions_${{ env.COLLECTION_DATE }}.json \
+          --output-file ${{ env.OUTPUT_DIR }}/github_summary_${{ env.COLLECTION_DATE }}.json
+
+    - name: Validate output files
+      run: |
+        echo "=== Output files created ==="
+        ls -la ${{ env.OUTPUT_DIR }}/
+        echo ""
+        echo "=== File sizes ==="
+        du -sh ${{ env.OUTPUT_DIR }}/*
+        echo ""
+        echo "=== Sample data from summary ==="
+        if [ -f "${{ env.OUTPUT_DIR }}/github_summary_${{ steps.params.outputs.date }}.json" ]; then
+          head -20 ${{ env.OUTPUT_DIR }}/github_summary_${{ steps.params.outputs.date }}.json
+        fi
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: github-data-${{ steps.params.outputs.timestamp }}
+        path: |
+          ${{ env.OUTPUT_DIR }}/*.json
+        retention-days: 30
+
+    - name: Commit and push results (if on main branch)
+      if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add ${{ env.OUTPUT_DIR }}/*.json || true
+        git diff --staged --quiet || git commit -m "Add GitHub data collection results for ${{ steps.params.outputs.date }}"
+        git push || true
+
+  # Optional: Deploy results to GitHub Pages
+  deploy-to-pages:
+    needs: collect-github-data
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download artifacts
+      uses: actions/download-artifact@v3
+      with:
+        pattern: github-data-*
+        merge-multiple: true
+        path: ./output
+
+    - name: Generate HTML dashboard
+      run: |
+        python src/generate_dashboard.py --output-dir ./output --web-dir ./docs
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v3
+
+    - name: Upload to GitHub Pages
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: './docs'
+
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v2
+
+  # Cleanup old artifacts
+  cleanup:
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+    - name: Delete old artifacts
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            run_id: context.runId,
+          });
+
+          const cutoff = new Date();
+          cutoff.setDate(cutoff.getDate() - 7); // Keep artifacts for 7 days
+
+          for (const artifact of artifacts.data.artifacts) {
+            if (new Date(artifact.created_at) < cutoff) {
+              await github.rest.actions.deleteArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: artifact.id,
+              });
+              console.log(`Deleted artifact: ${artifact.name}`);
+            }
+          }

@@ -1,0 +1,11 @@
+# GitHub Organizations to Monitor
+organizations:
+  - name: "gridatek"
+    description: "Grida Tek"
+    priority: "high"
+
+# Collection settings
+settings:
+  max_repos_per_org: 100
+  max_contributors_per_repo: 20
+  rate_limit_buffer: 100

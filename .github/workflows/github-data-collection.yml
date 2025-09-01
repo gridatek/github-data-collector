@@ -76,7 +76,7 @@ jobs:
           echo "max_repos=${{ github.event.inputs.max_repos_per_org }}" >> $GITHUB_OUTPUT
           echo "include_contributions=${{ github.event.inputs.include_contributions }}" >> $GITHUB_OUTPUT
         else
-          echo "organizations=apache,kubernetes,tensorflow,microsoft,google,facebook" >> $GITHUB_OUTPUT
+          echo "organizations=gridatek" >> $GITHUB_OUTPUT
           echo "max_repos=50" >> $GITHUB_OUTPUT
           echo "include_contributions=true" >> $GITHUB_OUTPUT
         fi

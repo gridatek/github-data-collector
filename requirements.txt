@@ -3,7 +3,7 @@ apache-airflow[postgres,redis]==3.0.0
 
 # Airflow providers
 apache-airflow-providers-http==4.11.0
-apache-airflow-providers-postgres==5.11.0
+apache-airflow-providers-postgres==5.13.1
 
 # GitHub API and data processing
 PyGithub==2.1.1

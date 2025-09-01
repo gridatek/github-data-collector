@@ -106,25 +106,25 @@ jobs:
           $CONTRIB_FILE \
           --output-file output/github_summary_${{ steps.params.outputs.date }}.json
 
-    - name: Display results
-      run: |
-        echo "=== 📊 Collection Results ==="
-        ls -la output/
-        echo ""
-        echo "=== 📈 Summary Statistics ==="
-        if [ -f "output/github_summary_${{ steps.params.outputs.date }}.json" ]; then
-          python -c "
-import json
-with open('output/github_summary_${{ steps.params.outputs.date }}.json', 'r') as f:
-    data = json.load(f)
-    print(f\"🏢 Organizations: {data['collection_metadata']['total_organizations']}\")
-    print(f\"📚 Repositories: {data['collection_metadata']['total_repositories']:,}\")
-    print(f\"⭐ Total Stars: {data['repository_statistics']['total_stars']:,}\")
-    print(f\"🔀 Total Forks: {data['repository_statistics']['total_forks']:,}\")
-    if 'contribution_analysis' in data:
-        print(f\"👥 Contributors: {data['contribution_analysis']['total_contributors']:,}\")
-"
-        fi
+#    - name: Display results
+#      run: |
+#        echo "=== 📊 Collection Results ==="
+#        ls -la output/
+#        echo ""
+#        echo "=== 📈 Summary Statistics ==="
+#        if [ -f "output/github_summary_${{ steps.params.outputs.date }}.json" ]; then
+#          python -c "
+#import json
+#with open('output/github_summary_${{ steps.params.outputs.date }}.json', 'r') as f:
+#    data = json.load(f)
+#    print(f\"🏢 Organizations: {data['collection_metadata']['total_organizations']}\")
+#    print(f\"📚 Repositories: {data['collection_metadata']['total_repositories']:,}\")
+#    print(f\"⭐ Total Stars: {data['repository_statistics']['total_stars']:,}\")
+#    print(f\"🔀 Total Forks: {data['repository_statistics']['total_forks']:,}\")
+#    if 'contribution_analysis' in data:
+#        print(f\"👥 Contributors: {data['contribution_analysis']['total_contributors']:,}\")
+#"
+#        fi
 
     - name: Upload results
       uses: actions/upload-artifact@v3
